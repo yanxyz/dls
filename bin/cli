@@ -1,0 +1,92 @@
+#!/usr/bin/env node
+
+'use strict'
+
+const fs = require('fs')
+const path = require('path')
+const packageJson = require('package-json')
+
+run(process.argv[2])
+
+function run (packageName) {
+  getPackage(packageName)
+    .then(function (data) {
+      const pkg = data
+
+      const lines = []
+      lines.push(`# [${pkg.name}](${pkg.homepage}) @ ${pkg.version}`)
+      lines.push(`${pkg.description}`)
+      pkg.lines = lines
+
+      return get(pkg, 'dependencies')
+    })
+    .then(function (pkg) {
+      return get(pkg, 'devDependencies')
+    })
+    .then(function (pkg) {
+      return get(pkg, 'optionalDependencies')
+    })
+    .then(function (pkg) {
+      return writeFileAsync(`package.${pkg.name}.md`, pkg.lines.join('\n'))
+    })
+    .catch(function (err) {
+      console.log(err)
+    })
+}
+
+function getPackage (packageName) {
+  if (packageName) {
+    return getPackageJSON(packageName)
+  }
+
+  return new Promise(function (resolve, reject) {
+    try {
+      const pkg = require(path.join(process.cwd(), 'package.json'))
+      resolve(pkg)
+    } catch (err) {
+      reject(new Error('not found package.json under the current working directory'))
+    }
+  })
+}
+
+function getPackageJSON (packageName) {
+  return new Promise(function (resolve, reject) {
+    packageJson(packageName, 'latest', function (err, json) {
+      if (err) reject(new Error(`not found ${packageName}`))
+      resolve(json)
+    })
+  })
+}
+
+function get (pkg, field) {
+  const target = pkg[field]
+  if (!target) {
+    return Promise.resolve(pkg)
+  }
+
+  const keys = Object.keys(target)
+  if (!keys.length) {
+    return Promise.resolve(pkg)
+  }
+
+  return Promise.all(keys.map(getPackageJSON))
+    .then(function (list) {
+      const lines = [`### ${field}`]
+      lines.push('name|description|required|latest')
+      lines.push('----|-----------|--------|------')
+      list.forEach(function (x) {
+        lines.push(`[${x.name}](${x.homepage}) | ${x.description}|${target[x.name]}|${x.version}`)
+      })
+      pkg.lines = pkg.lines.concat(lines)
+      return pkg
+    })
+}
+
+function writeFileAsync (fileName, data, options) {
+  return new Promise(function (resolve, reject) {
+    fs.writeFile(fileName, data, options, function (err) {
+      if (err) reject(err)
+      resolve()
+    })
+  })
+}

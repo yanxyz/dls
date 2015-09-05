@@ -1,0 +1,107 @@
+#!/usr/bin/env node
+
+'use strict'
+
+const fs = require('fs')
+const path = require('path')
+const exec = require('child_process').exec
+
+run(process.argv[2])
+
+function run (packageName) {
+  getPackage(packageName)
+    .then(function (data) {
+      const pkg = data
+
+      const lines = []
+      lines.push(`# [${pkg.name}](${pkg.homepage}) @ ${pkg.version}`)
+      lines.push(`${pkg.description}`)
+      pkg.lines = lines
+
+      return get(pkg, 'dependencies')
+    })
+    .then(function (pkg) {
+      return get(pkg, 'devDependencies')
+    })
+    .then(function (pkg) {
+      return get(pkg, 'optionalDependencies')
+    })
+    .then(function (pkg) {
+      return writeFileAsync(`package.${pkg.name}.md`, pkg.lines.join('\n'))
+    })
+    .catch(function (err) {
+      console.log(err)
+    })
+}
+
+function getPackage (packageName) {
+  return new Promise(function (resolve, reject) {
+    let pkg
+    if (packageName) {
+      // --json https://docs.npmjs.com/cli/view#output
+      // --silent https://docs.npmjs.com/misc/config#shorthands-and-other-cli-niceties
+      const command = `npm view ${packageName} --json --silent`
+      exec(command, function (err, stdout) {
+        if (err) {
+          // failed to reject, so directly exit
+          // reject(new Error(`Command failed: ${command}`))
+          console.log(`Command failed: ${command}`)
+          process.exit()
+        }
+        resolve(JSON.parse(stdout))
+      })
+    } else {
+      try {
+        pkg = require(path.join(process.cwd(), 'package.json'))
+        resolve(pkg)
+      } catch (err) {
+        reject(new Error('not found package.json under this directory'))
+      }
+    }
+  })
+}
+
+function get (pkg, field) {
+  const target = pkg[field]
+  if (!target) {
+    return Promise.resolve(pkg)
+  }
+
+  const keys = Object.keys(target)
+  if (!keys.length) {
+    return Promise.resolve(pkg)
+  }
+
+  // execut in series in case of 100% CPU usage
+  return keys.reduce(function (p, curr) {
+    return p.then(function (list) {
+      return new Promise(function (resolve, reject) {
+        exec(`npm view ${curr} --json`, function (err, stdout) {
+          if (err) reject(err)
+          list.push(JSON.parse(stdout))
+          resolve(list)
+        })
+      })
+    })
+  }, Promise.resolve([]))
+    .then(function (list) {
+      const lines = [`### ${field}`]
+      // GFM table https://help.github.com/articles/github-flavored-markdown/#tables
+      lines.push('name|description|required|latest')
+      lines.push('----|-----------|--------|------')
+      list.forEach(function (x) {
+        lines.push(`[${x.name}](${x.homepage})|${x.description}|${target[x.name]}|${x.version}`)
+      })
+      pkg.lines = pkg.lines.concat(lines)
+      return pkg
+    })
+}
+
+function writeFileAsync (fileName, data, options) {
+  return new Promise(function (resolve, reject) {
+    fs.writeFile(fileName, data, options, function (err) {
+      if (err) reject(err)
+      resolve()
+    })
+  })
+}

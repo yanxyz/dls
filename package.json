@@ -1,0 +1,24 @@
+{
+  "name": "dls",
+  "version": "1.0.0",
+  "description": "Make a list of the dependencies of a package and output it as a markdown file",
+  "bin": {
+    "dls": "./bin/cli"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ivan Yan",
+  "homepage": "https://github.com/yanxyz/dls",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yanxyz/dls.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yanxyz/dls/issues"
+  },
+  "dependencies": {
+    "package-json": "^1.2.0"
+  }
+}
